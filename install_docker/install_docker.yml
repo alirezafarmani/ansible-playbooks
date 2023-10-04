@@ -1,1 +1,167 @@
+###################################################
+# docker instalation playbook                     #
+# cretaed by alireza_EVO                          #
+# autom 2023-1402                                 #
+# my frist enterprise playbook                    #
+###################################################
 
+
+
+    
+# step 1 for set dns
+
+  - name: STEP-1(SET DNS TO ALL NODES)
+    hosts: all
+    become: yes 
+    tasks:
+      - name: set DNS for hosts
+        copy:
+          content:  |
+           nameserver 178.22.122.100
+           nameserver 185.51.200.2
+          dest: /etc/resolv.conf
+          force: yes
+
+# step 2 for disable DNS 
+
+  - name: STEP-2(DISABLE AUTO DNS RESOLVE)
+    hosts: all
+    become: yes
+    tasks:
+      - name: DNS disabled
+        shell: systemctl mask resolved
+      - name: remove gpg key from all nodes
+        shell: rm -fr /etc/apt/keyrings/docker.gpg
+
+
+# step 3 remove docker.io(minimum docker version)
+
+  - name: STEP-3(REMOVE docker.io)
+    hosts: all
+    become: yes
+    tasks:
+      - name: remove docker.io from "Debian" NODES
+        apt: 
+          name: "{{ item }}"
+          state: absent
+          force: true
+        loop:
+          - docker.io
+          - docker-compose
+          - docker-doc
+          - podman-docker
+        when: ansible_os_family == "Debian"
+
+      - name: remove docker from "Rocky" NODES
+        dnf:
+          name: "{{ item }}"
+          state: absent
+        loop:
+          - docker.io
+          - docker-compose
+          - docker-doc
+          - podman-docker
+          - docker-engine
+          - docker-client
+          - docker-client-latest
+          - docker-common
+          - docker-latest
+          - docker-latest-logrotate
+        when: ansible_os_family == "Rocky"           
+          
+         
+# step 4 for update repositories
+
+#  - name: STEP-4(UPDATE REPOSITORIES)
+#    hosts: all
+#    become: yes
+#    tasks:
+#      - name: update REPOS (Debian)
+#        shell: apt update
+#        when: ansible_os_family == "Debian"#
+#
+#     - name: update repos (Rocky)
+#        shell: dnf update -y
+#        when: ansible_os_family == "Rocky"
+
+# step 5 install docker dependencies
+ 
+  - name: STEP-5(INSTALL DOCKER DEPENDENCIES)
+    hosts: all
+    become: yes
+    tasks:
+      - name: install dependencies (Debian)
+        apt:
+          name: "{{ item }}"
+          state: latest
+          force: true
+        loop:
+          - ca-certificates
+          - curl
+          - gnupg
+        when: ansible_os_family == "Debian"
+      - name: install dependencies (Rocky)
+        dnf:
+          name: yum-utils
+          state: latest
+        when: ansible_os_family == "Rocky"
+
+# step 6 add repository
+  - name: STEP-6 ADD ROCKY repository
+    hosts: all
+    become: yes        
+    tasks:
+      - name: add docker repository (Rocky)  
+        shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        when: ansible_os_family == "Rocky"
+
+      - name: update repo (Rocky)
+        shell: yum update -y
+        when: ansible_os_family == "Rocky"
+
+
+      - name: add Debian repository
+        raw: install -m 0755 -d /etc/apt/keyrings && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg && chmod a+r /etc/apt/keyrings/docker.gpg 
+        when: ansible_os_family == "Debian"
+
+      - name: add docker repo to /etc/apt/source (Debian)
+        raw: echo  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" |  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        when: ansible_os_family == "Debian"
+
+      - name: update repo (debian)
+        command: apt update
+        when: ansible_os_family == "Debian"
+
+# step 7 install docker 
+  - name: STEP-7 INSTALL DOCKER
+    hosts: all
+    become: yes
+    tasks:
+      - name: install docker (Debian)
+        apt:  
+          name: "{{ item }}"
+          state: latest
+        loop:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        when: ansible_os_family == "Debian"
+      
+      - name: install docker (Rocky)
+        dnf:
+          name: "{{ item }}"
+          state: latest
+        loop: 
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        when: ansible_os_family == "Rocky"
+
+      - name: start docker service
+        service: 
+          name: docker
+          state: started
