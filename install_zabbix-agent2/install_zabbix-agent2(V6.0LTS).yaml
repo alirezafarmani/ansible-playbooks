@@ -1,1 +1,95 @@
+##########################################################################
+#Install zabbix-agent2 playbook on ubuntu and rocky nodes                #       
+#Created by alireza_EVO                                                  #                     
+#Autumn 1402-2023                                                        #
+#version ===> 6.0 LTS                                                    #                 
+##########################################################################
 
+
+#### in this step removed zabbix-agent2 if recently exist#####
+- name: STEP-1 REMOVE DEPRECATED ZABBIX-AGENT-2 
+  hosts: [ubuntug]
+  become: yes 
+  tasks: 
+    - name: uninstall zabbix-agent2
+      apt: 
+        name: [ zabbix-agent2 , zabbix-agent2-plugin-* ]
+        state: absent
+    - name: remove zabbix-agent-2 package file
+      file:
+       dest: /root/zabbix-release_6.0-4+ubuntu22.04_all.deb
+       force: true
+       state: absent
+    - name: updating...
+      raw: apt update 
+
+
+#### open firewall (if your firewall is disabled no force on doing this step)####
+- name: STEP2 OPEN FIREWALL PORTS ON ALL NODES
+  hosts: [ubuntug]
+  become: yes
+  tasks:  
+    - name: open firewall port (Debian)
+      ufw:
+       rule: allow
+       port: 10050,10051
+       proto: tcp
+    - name: open firewall port (Rocky)
+      hosts: [rhleg]
+      firewalld:
+        protocol: tcp
+        state: enabled
+        port: 10050-10051/tcp
+        permanent: true
+
+
+####in this step we got zabbix repository for our Debain Based nodes####
+- name: STEP-3 GET ZABBIX-AGENT2 REPOSITORY
+  hosts: [ubuntug]
+  become: yes
+  tasks:
+    - name: GET ZABBIX-AGENT2 (ubuntu)
+      shell: wget https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-4+ubuntu22.04_all.deb
+    - name: install zabbix-agent2 (Package)
+      raw: dpkg -i /root/zabbix-release_6.0-4+ubuntu22.04_all.deb 
+####in this step installing zabbix from repository(for Debian based nodes) ####
+- name: STEP-4 INSTALL ZABBIX-AGENT FROM REPOOSITORY
+  hosts: [ubuntug]
+  become: yes
+  tasks: 
+    - name: install zabbix-agent2
+      apt: 
+        update_cache: yes
+        name: [ zabbix-agent2 , zabbix-agent2-plugin-* ]
+        state: latest
+
+
+####in this step got zabbix repository for our Redhat baser nodes ####
+- name: STEP-5 GET ZABBIX REPOSITORY FOR ROCKEY
+  hosts: [rhleg]
+  become: yes
+  tasks:
+    - name: get zabbix repo for (Rocky)
+      raw: rpm -Uvh https://repo.zabbix.com/zabbix/6.0/rhel/8/x86_64/zabbix-release-6.0-4.el8.noarch.rpm && dnf clean all
+
+####in this step install zabbix-agent2 from repository for our Redhat nodes####
+- name: STEP-6 ADDING ZABBIX-AGENT2-REPOSITORY (ROCKEY)
+  hosts: [rhleg]
+  become: yes
+  tasks: 
+    - name: install zabbix-agent2 (Rockey)
+      dnf:
+        update_cache: true
+        name: [ zabbix-agent2 , zabbix-agent2-plugin-* ]
+        state: latest
+
+
+####in this step starting zabbix-agent2.service on all nodes####
+- name: STEP-7 STARTING ZABBIX-AGENT2.SERVICE 
+  hosts: all
+  become: yes
+  tasks:
+   - name: start zabbix-agent-2 service
+     service:
+       name: zabbix-agent2.service
+       state: started
